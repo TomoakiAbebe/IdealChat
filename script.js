@@ -78,6 +78,7 @@
     dom.sidebarScenarioList = document.getElementById('sidebar-scenario-list');
     dom.toggleSidebarButton = document.getElementById('toggle-sidebar-button');
     dom.sidebarOverlay = document.getElementById('sidebar-overlay');
+    dom.screenshotButton = document.getElementById('screenshot-button');
     dom.settingsButton = document.getElementById('settings-button');
     dom.renameHeaderButton = document.getElementById('rename-header-button');
     dom.settingsModal = document.getElementById('settings-modal');
@@ -108,6 +109,7 @@
     if (dom.importInput) dom.importInput.addEventListener('change', handleImportFile);
     if (dom.toggleSidebarButton) dom.toggleSidebarButton.addEventListener('click', toggleSidebar);
     if (dom.sidebarOverlay) dom.sidebarOverlay.addEventListener('click', toggleSidebar);
+    if (dom.screenshotButton) dom.screenshotButton.addEventListener('click', takeScreenshot);
     if (dom.settingsButton) dom.settingsButton.addEventListener('click', openSettingsModal);
     if (dom.renameHeaderButton) dom.renameHeaderButton.addEventListener('click', () => {
       if (currentScenario) {
@@ -574,6 +576,147 @@
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     showToast('ファイルをダウンロードしました');
+  }
+
+  async function takeScreenshot() {
+    if (!dom.messageList) {
+      showToast('メッセージがありません');
+      return;
+    }
+
+    // html2canvasが読み込まれているか確認
+    if (typeof html2canvas === 'undefined') {
+      showToast('スクリーンショット機能が利用できません');
+      console.error('html2canvas is not loaded');
+      return;
+    }
+
+    showToast('スクリーンショットを作成中...');
+
+    try {
+      const messageList = dom.messageList;
+      const layout = document.getElementById('layout');
+      const chatColumn = document.getElementById('chat-column');
+      
+      // 現在のスタイルを保存
+      const originalStyles = {
+        messageList: {
+          height: messageList.style.height,
+          maxHeight: messageList.style.maxHeight,
+          overflow: messageList.style.overflow,
+          overflowY: messageList.style.overflowY,
+          flex: messageList.style.flex,
+          minHeight: messageList.style.minHeight
+        },
+        layout: layout ? {
+          overflow: layout.style.overflow,
+          height: layout.style.height
+        } : null,
+        chatColumn: chatColumn ? {
+          overflow: chatColumn.style.overflow,
+          height: chatColumn.style.height
+        } : null
+      };
+      
+      // 一時的にスクロールを無効化し、全体を表示
+      messageList.style.height = 'auto';
+      messageList.style.maxHeight = 'none';
+      messageList.style.overflow = 'visible';
+      messageList.style.overflowY = 'visible';
+      messageList.style.flex = 'none';
+      messageList.style.minHeight = '0';
+      
+      if (layout) {
+        layout.style.overflow = 'visible';
+        layout.style.height = 'auto';
+      }
+      
+      if (chatColumn) {
+        chatColumn.style.overflow = 'visible';
+        chatColumn.style.height = 'auto';
+      }
+      
+      // 少し待機してDOMが更新されるのを待つ
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      // html2canvasでスクリーンショットを撮影
+      const canvas = await html2canvas(messageList, {
+        backgroundColor: '#f7f7f8',
+        scale: 2,
+        logging: false,
+        useCORS: true,
+        allowTaint: true,
+        foreignObjectRendering: false,
+        imageTimeout: 0,
+        windowHeight: messageList.scrollHeight + 100
+      });
+      
+      // 元の状態に戻す
+      messageList.style.height = originalStyles.messageList.height;
+      messageList.style.maxHeight = originalStyles.messageList.maxHeight;
+      messageList.style.overflow = originalStyles.messageList.overflow;
+      messageList.style.overflowY = originalStyles.messageList.overflowY;
+      messageList.style.flex = originalStyles.messageList.flex;
+      messageList.style.minHeight = originalStyles.messageList.minHeight;
+      
+      if (layout && originalStyles.layout) {
+        layout.style.overflow = originalStyles.layout.overflow;
+        layout.style.height = originalStyles.layout.height;
+      }
+      
+      if (chatColumn && originalStyles.chatColumn) {
+        chatColumn.style.overflow = originalStyles.chatColumn.overflow;
+        chatColumn.style.height = originalStyles.chatColumn.height;
+      }
+      
+      // Canvasを画像に変換してダウンロード
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          showToast('画像の生成に失敗しました');
+          return;
+        }
+        
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+        const scenarioName = currentScenario?.name || 'chat';
+        const safeName = scenarioName.replace(/[^a-zA-Z0-9_\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/g, '_');
+        a.href = url;
+        a.download = `screenshot_${safeName}_${timestamp}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showToast('スクリーンショットを保存しました');
+      }, 'image/png');
+      
+    } catch (error) {
+      console.error('スクリーンショットエラー:', error);
+      showToast('スクリーンショットの作成に失敗しました: ' + error.message);
+      
+      // エラー時は元の状態に戻す
+      const messageList = dom.messageList;
+      const layout = document.getElementById('layout');
+      const chatColumn = document.getElementById('chat-column');
+      
+      if (messageList) {
+        messageList.style.height = '';
+        messageList.style.maxHeight = '';
+        messageList.style.overflow = '';
+        messageList.style.overflowY = '';
+        messageList.style.flex = '';
+        messageList.style.minHeight = '';
+      }
+      if (layout) {
+        layout.style.overflow = '';
+        layout.style.height = '';
+      }
+      if (chatColumn) {
+        chatColumn.style.overflow = '';
+        chatColumn.style.height = '';
+      }
+    }
   }
 
   function handleImportFile(event) {
